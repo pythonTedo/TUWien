@@ -1,0 +1,20 @@
+---
+title: "Introduction to Bayesian Inference"
+author: "Teodor Chakarov"
+date: "2023-12-13"
+output:
+  pdf_document:
+    latex_engine: xelatex
+    toc: yes
+---
+
+
+
+
+
+
+
+
+
+
+

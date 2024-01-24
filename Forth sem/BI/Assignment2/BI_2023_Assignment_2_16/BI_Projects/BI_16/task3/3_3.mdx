@@ -1,0 +1,10 @@
+SELECT 
+  { [Measures].[Profit] } ON COLUMNS,
+  TOPCOUNT(
+    [Customer].[FullName].MEMBERS, 
+    10, 
+    [Measures].[Profit]
+  ) ON ROWS
+FROM [bike_sales]
+WHERE 
+  ([Year].&[2021])

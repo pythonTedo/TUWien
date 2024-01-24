@@ -1,0 +1,335 @@
+---
+title: "Cross Validation of Models"
+author: "Teodor Chakarov"
+date: "2023-11-22"
+output:
+  pdf_document:
+    latex_engine: xelatex
+    toc: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+set.seed(12141198)
+```
+
+# Task 1
+Import the dataset.
+
+```{r, results='hide'}
+library(ISLR)
+data('Auto')
+
+df <- Auto
+head(df)
+```
+This is pretty standard dataset wich contains information about cars. The target variable is miles per gallon.
+
+## Fitting models
+```{r}
+mod_1 <- lm(mpg ~ horsepower, data=df)
+mod_2 <- lm(mpg ~ poly(horsepower, 2), data=df)
+mod_3 <- lm(mpg ~ poly(horsepower, 3), data=df)
+```
+
+Visualize all 3 models in comparison added to a scatterplot of the input data.
+
+```{r}
+x <- data.frame('horsepower'= seq(min(df$horsepower), max(df$horsepower), by=0.1))
+
+y_1 <- predict(mod_1, x)
+y_2 <- predict(mod_2, x)
+y_3 <- predict(mod_3, x)
+
+plot(mpg ~ horsepower, data=df, main='Comparison of the different models')
+lines(x$horsepower, y_1, col='blue', type='l', lwd = 2)
+lines(x$horsepower, y_2, col='red', type='l', lwd = 2)
+lines(x$horsepower, y_3, col='yellow', type='l', lwd = 2)
+legend('topright', legend=c("Linear Regression", "Quadratic Regression", "Cubic Regression"),
+       col=c("blue", "red", "yellow"), lty=1, cex=.9)
+```
+We can see how the Linear regression underfits the data (dont describe the points), while the quadratic and cubic regression does better job.
+
+## Use the validation set approach to compare the models. Use once a train/test split of 50%/50% and once 70%/30%. Choose the best model based on Root Mean Squared Error, Mean Squared Error and Median Absolute Deviation.
+
+
+```{r}
+evaluate <- function(model, measure, position) {
+  test <- df[-position,]
+  pred <- predict(model, test)
+  
+  return(measure(test$mpg, pred))
+}
+```
+
+
+```{r}
+mse <- function(true, pred) {
+  return(mean((true - pred)^2))
+}
+
+rmse <- function(true, pred) {
+  return(sqrt(mse(true, pred)))
+}
+
+median_div <- function(true, pred) {
+  return(median(abs(true - pred)))
+}
+```
+
+Lets do a 50% split of the data
+```{r}
+n <- nrow(df)
+set.seed(12141198)
+
+data_size <- round(0.5 * n)
+
+train_split <- sample(1:n, size=data_size)
+
+reg1 <- lm(mpg ~ horsepower, data=df[train_split,])
+reg2 <- lm(mpg ~ poly(horsepower,2), data=df[train_split,])
+reg3 <- lm(mpg ~ poly(horsepower,3), data=df[train_split,])
+
+table_50_split <- data.frame(
+  Model=c("Linear Reg", "Quadratic Reg", "Cubic Reg"),
+  MSE=c(evaluate(reg1, mse, train_split), evaluate(reg2, mse, train_split), evaluate(reg3, mse, train_split)),
+  RMSE=c(evaluate(reg1, rmse, train_split), evaluate(reg2, rmse, train_split), evaluate(reg3, rmse, train_split)),
+  MAD=c(evaluate(reg1, median_div, train_split), evaluate(reg2, median_div, train_split), evaluate(reg3, median_div, train_split)))
+
+head(table_50_split)
+```
+
+Lets do the 70% data split now
+```{r}
+set.seed(12141198)
+
+split_size <- round(.7 * n)
+train_split_70 <- sample(1:n, size=split_size)
+
+train <- df[train_split_70, ]
+
+reg1 <- lm(mpg ~ horsepower, data=train)
+reg2 <- lm(mpg ~ poly(horsepower,2), data=train)
+reg3 <- lm(mpg ~ poly(horsepower,3), data=train)
+
+table_70_split <- data.frame(
+  Model=c("Linear Reg", "Quadratic Reg", "Cubic Reg"),
+  MSE=c(evaluate(reg1, mse, train_split_70), evaluate(reg2, mse, train_split_70), evaluate(reg3, mse, train_split_70)),
+  RMSE=c(evaluate(reg1, rmse, train_split_70), evaluate(reg2, rmse, train_split_70), evaluate(reg3, rmse, train_split_70)),
+  MAD=c(evaluate(reg1, median_div, train_split_70),evaluate(reg2, median_div, train_split_70), evaluate(reg3, median_div, train_split_70)))
+head(table_70_split)
+
+```
+We see that the Quadratic and Cubic Regression give us similar results, although Quadratic Regression give us the best and the linear regression always perform worse than the two others. 
+
+## Use the cv.glm function in the boot package for the following steps.
+Use cv.glm for Leave-one-out Cross Validation to compare the models above.
+
+```{r}
+library(boot)
+
+reg1 <- glm(mpg ~ horsepower, data=df)
+reg2 <- glm(mpg ~ poly(horsepower,2), data=df)
+reg3 <- glm(mpg ~ poly(horsepower,3), data=df)
+
+```
+
+Use cv.glm for 5-fold and 10-fold Cross Validation to compare the models above.
+```{r}
+# Leave-One-Out
+reg1_cv <- cv.glm(glmfit = reg1, data=df)$delta[1]
+reg2_cv <- cv.glm(glmfit = reg2, data=df)$delta[1]
+reg3_cv <- cv.glm(glmfit = reg3, data=df)$delta[1]
+
+# 5-fold CV
+reg_1_5_fold <- cv.glm(glmfit = reg1, data=df, K=5)$delta[1]
+reg_2_5_fold <- cv.glm(glmfit = reg2, data=df, K=5)$delta[1]
+reg_3_5_fold <- cv.glm(glmfit = reg3, data=df, K=5)$delta[1]
+
+# 10-fold CV
+res_1_10_fold <- cv.glm(glmfit = reg1, data=df, K=10)$delta[1]
+res_2_10_fold <- cv.glm(glmfit = reg2, data=df, K=10)$delta[1]
+res_3_10_fold <- cv.glm(glmfit = reg3, data=df, K=10)$delta[1]
+```
+
+
+## Compare all "mean squared error" results from 2 and 3. in a table and draw your conclusions.
+```{r}
+table <- data.frame(
+  "model"=c("Linear Regression", "Quadratic Regression", "Cubic Regression"),
+  "leave_one_out"=c(reg1_cv,reg2_cv,reg3_cv),
+  "cv_5" = c(reg_1_5_fold,reg_2_5_fold,reg_3_5_fold),
+  "cv_10" = c(res_1_10_fold,res_2_10_fold,res_3_10_fold)
+)
+
+head(table)
+```
+
+With the cross validation we can see that the Quadratic Regression	performs slightly better than the other models. Cross validation also provides better result than the classical train test splitting techniques.
+
+# Task 2:
+Load the data set 'df2' from the package 'ggplot2'.
+
+```{r}
+library(ggplot2)
+
+df2 <- economics
+head(df2)
+```
+
+
+## 1 Fit the following models to explain the number of unemployed persons 'unemploy' by the median number of days unemployed 'uempmed' and vice versa:
+- linear model
+```{r}
+lm_unemploy <- glm(unemploy ~ uempmed, data = df2)
+summary(lm_unemploy)
+```
+
+Reversed:
+```{r}
+lm_uempmed <- glm(uempmed ~ unemploy, data = df2)
+summary(lm_uempmed)
+```
+
+- an appropriate exponential or logarithmic model (which one is appropriate depends on which is the dependent or independent variable)
+  
+```{r}
+log_unemploy <- glm(unemploy ~ log(uempmed), data = df2)
+summary(log_unemploy)
+```
+
+Reversed:
+```{r}
+log_uempmed <- glm(uempmed ~ log(unemploy), data = df2)
+summary(log_uempmed)
+```
+
+- polynomial model of 2nd, 3rd and 10th degree
+```{r}
+lr_poly_2_unemploy <- glm(unemploy ~ poly(uempmed,2), data = df2)
+lr_poly_3_unemploy <- glm(unemploy ~ poly(uempmed,3), data = df2)
+lr_poly_10_unemploy <- glm(unemploy ~ poly(uempmed,10), data = df2)
+```
+
+```{r}
+# Reversed:
+lr_poly_2_uempmed <- glm(uempmed ~ poly(unemploy,2), data = df2)
+lr_poly_3_uempmed <- glm(uempmed ~ poly(unemploy,3), data = df2)
+lr_poly_10_uempmed <- glm(uempmed ~ poly(unemploy,10), data = df2)
+```
+
+
+## Plot the corresponding data and add all the models for comparison.
+Plot models to predict umemploy:
+```{r}
+plot(df2$uempmed, df2$unemploy)
+lines(df2$uempmed, fitted(lm_unemploy), col=1, lwd=2)
+lines(df2$uempmed, fitted(log_unemploy), col=2, lwd=2)
+
+lines(df2$uempmed, fitted(lr_poly_2_unemploy), col=3, lwd=1)
+lines(df2$uempmed, fitted(lr_poly_3_unemploy), col=4, lwd=1)
+lines(df2$uempmed, fitted(lr_poly_10_unemploy), col=6, lwd=1)
+legend("bottomright",legend=c("linear","log","lm poly 2","lm poly 3","lm poly 10"),col=c(1,2,3,4,6), lty=1)
+```
+We can see how those models try to describe the data on the most opitmal way. Linear regression just gives us one line which under fits the data. While others are almost similar.
+
+Plot models to predict uempmed:
+```{r}
+plot(df2$unemploy, df2$uempmed)
+lines(df2$unemploy, fitted(lm_uempmed), col=1, lwd=2)
+lines(df2$unemploy, fitted(log_uempmed), col=2, lwd=2)
+lines(df2$unemploy, fitted(lr_poly_2_uempmed), col=3, lwd=2)
+lines(df2$unemploy, fitted(lr_poly_3_uempmed), col=4, lwd=2)
+lines(df2$unemploy, fitted(lr_poly_10_uempmed), col=6, lwd=2)
+legend("topleft",legend=c("linear","exp","poly 2","poly 3","poly 10"),col=c(1,2,3,4,6), lty=1)
+
+```
+Here we can see how the Ploynomial of 10th describes the data ecpacially at the end. The curve represents overfitting and learning the noise of the data in order to represent it perfeclty, which we don't want, because the test data wont be so representative.
+
+
+## Use the cv.glm function in the boot package for the following steps. Compare the Root Mean Squared Error and Mean Squared Error.
+Predict unemploy variable:
+
+```{r}
+get_comparison_unemploy <- function(data, folds){
+  cv_lm_unemploy <- cv.glm(data, glm(lm_unemploy), K=folds)
+  cv_log_unemploy <- cv.glm(data, glm(log_unemploy), K=folds)
+  cv_poly_2_unemploy <- cv.glm(data, glm(lr_poly_2_unemploy), K=folds)
+  cv_poly_3_unemploy <- cv.glm(data, glm(lr_poly_3_unemploy), K=folds)
+  cv_poly_10_unemploy <- cv.glm(data, glm(lr_poly_10_unemploy), K=folds)
+  
+  data.frame(
+  "Model" = c("linear", "exponential", "poly 2", "poly 3", "poly 10"),
+  "MSE" = c(cv_lm_unemploy$delta[1],cv_log_unemploy$delta[1],cv_poly_2_unemploy$delta[1], cv_poly_3_unemploy$delta[1],cv_poly_10_unemploy$delta[1]),
+  "RMSE" = c(sqrt(cv_lm_unemploy$delta[1]),sqrt(cv_log_unemploy$delta[1]),sqrt(cv_poly_2_unemploy$delta[1]),sqrt(cv_poly_3_unemploy$delta[1]), sqrt(cv_poly_10_unemploy$delta[1])))
+}
+```
+
+
+1. Leave-one-out Cross Validation
+```{r}
+get_comparison_unemploy(df2, nrow(df2))
+```
+
+2. 5-fold and 10-fold Cross Validation
+
+### 5-fold CV
+```{r}
+get_comparison_unemploy(df2, 5)
+```
+
+### 10-fold CV
+```{r}
+get_comparison_unemploy(df2, 10)
+
+```
+
+### Conclusions
+
+Based on the results we have, we can see that the polynomial of 10th regresson has the small amount or error, but in leave-one-out we have surprisingly high score for this model. But in general, the errors are pretty similar in all of the cross-validation techniques. We have big RMSE error, in order to tackle this problem, maybe we can aslo scale our predictor variables in order to gett more stable results.
+
+
+Predict uempmed varable:
+```{r}
+get_comparison_uempmed <- function(data, folds){
+  cv_lm_uempmed <- cv.glm(data, glm(lm_uempmed), K=folds)
+  cv_log_uempmed <- cv.glm(data, glm(log_uempmed), K=folds)
+  cv_poly_2_uempmed <- cv.glm(data, glm(lr_poly_2_uempmed), K=folds)
+  cv_poly_3_uempmed <- cv.glm(data, glm(lr_poly_3_uempmed), K=folds)
+  cv_poly_10_uempmed <- cv.glm(data, glm(lr_poly_10_uempmed), K=folds)
+  
+  data.frame(
+  "Model" = c("linear", "exponential", "poly 2", "poly 3", "poly 10"),
+  "MSE" = c(cv_lm_uempmed$delta[1],cv_log_uempmed$delta[1],cv_poly_2_uempmed$delta[1], cv_poly_3_uempmed$delta[1],cv_poly_10_uempmed$delta[1]),
+  "RMSE" = c(sqrt(cv_lm_uempmed$delta[1]),sqrt(cv_log_uempmed$delta[1]),sqrt(cv_poly_2_uempmed$delta[1]),sqrt(cv_poly_3_uempmed$delta[1]), sqrt(cv_poly_10_uempmed$delta[1])))
+}
+```
+
+1. Leave-one-out Cross Validation
+```{r}
+
+get_comparison_uempmed(df2, nrow(df2))
+```
+
+
+2. 5-fold and 10-fold Cross Validation
+### 5-fold CV
+
+```{r}
+get_comparison_uempmed(df2, 5)
+```
+
+
+### 10-fold CV
+```{r}
+get_comparison_uempmed(df2, 10)
+```
+
+Here we have smaller error and as we can see again polynomial regressin 10 does the best job, even though th eoders perform also pretty well. The leave-one-out and the 10-fold Cv gives pretty similar results.   
+
+## Explain based on the CV and graphical model fits the concepts of Underfitting, Overfitting and how to apply cross-validation to determine the appropriate model fit. Also, describe the different variants of cross validation in this context.
+
+When a model i being train on specific data, the model "setts up" based on the data points. When the model is set not in a optimal state we have under fitting, which gives us a lot of bias. In the second task we can see it for a **unemploy** variable, where we have a hudge error. That means the model is not in its optimal form and not describes the data as much. To concuere this problem we will need either more complex model or more attributes which describes well the points.
+Overfitting in other hand is when the model describes too well the data in it fits perfectly to a lot of the points.In this case we have more variance which comes from the learned noice on the training data set. It usually gives use good results on RMSE or MSE. The plynomial regression of 10th gives us the best results and this is because the model is coplex and will describe the data better. To overcome this problem we can use more data or cross-validation. This method will give use knowleadge when the models starts to overfit. The methods for CV are following:
+Every data point is used for evaluation one time. The evaluation of the models can be done with a percentage of the data which is called k-fold cross validation. The data is split in k folds in this case. It can be done with just one datapoint for evaluation in each iteration which is called leave one out cross validation.

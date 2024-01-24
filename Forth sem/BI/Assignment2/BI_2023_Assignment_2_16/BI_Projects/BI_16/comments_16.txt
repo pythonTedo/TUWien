@@ -1,0 +1,1 @@
+In point 2.3/7 was mentioned that we have to do three single-level hierarchies, but we didn't do it like single levels because it was not working.

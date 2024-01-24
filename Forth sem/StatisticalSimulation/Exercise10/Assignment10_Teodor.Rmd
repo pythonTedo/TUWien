@@ -1,0 +1,15 @@
+---
+title: "Bayesian Non-parametrics and Bayesian Bootstrapping"
+author: "Teodor Chakarov"
+date: "2024-01-17"
+output: pdf_document
+---
+
+```{r error=TRUE}
+set.seed(12141198)
+library(devtools)
+library(DPpackage)
+```
+
+
+

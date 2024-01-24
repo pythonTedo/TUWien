@@ -1,0 +1,253 @@
+---
+title: "Exercise 1 - Introduction with Variance Estimation"
+author: "Teodor Chakarov"
+date: "2023-10-09"
+output: 
+  pdf_document:
+    latex_engine: xelatex
+    toc: TRUE
+---
+```{r}
+set.seed(12141198)
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+```{r, echo=TRUE}
+library(ggplot2)
+library(microbenchmark)
+library(rlang)
+
+x1 <- rnorm(100)
+x2 <- rnorm(500,mean=1000)
+x3 <- rnorm(500,mean=500)
+```
+
+## Task 1 - Comparing 4 algorithms
+
+*One - pass algorithm*
+```{r}
+var_one_pass_algo <- function(vec){
+  num = length(vec)
+  p1 = sum(vec^2)
+  p2 = 1/num * sum(vec)^2
+  var <- (p1 - p2)/(num-1)
+  return(var)
+}
+
+```
+
+*Two-pass algorithm*
+```{r}
+var_two_pass_algo <- function(vec){
+  num = length(vec)
+  smpl_mean <- sum(vec)/num
+  var <- 1/(num-1) * sum((vec - smpl_mean)^2)
+  return(var)
+}
+
+```
+
+*Shift algorithm*
+```{r}
+var_shift_algo <- function(vec){
+  num = length(vec)
+  c = vec[1]
+  p1 = sum((vec-c)^2)
+  p2 = 1/num * (sum(vec-c))^2
+  var <- (p1 - p2)/(num-1)
+  return(var)
+}
+```
+
+*Online algorithm*
+```{r}
+var_online_algo <- function(vec){
+
+  xmn_prev = vec[1] + (vec[2] - vec[1])/2
+  varmn_prev = ((vec[2] - vec[1])^2)/2
+  
+  for(i in 3:length(vec)) {
+    xmn = xmn_prev + (vec[i] - xmn_prev)/i
+    varmn = (i - 2)/(i - 1)*varmn_prev + ((vec[i] - xmn_prev)^2)/i
+    
+    xmn_prev = xmn
+    varmn_prev = varmn
+  }
+  
+  return(varmn)
+}
+```
+
+*Calculate Var Function*
+```{r, echo=TRUE}
+calc_var <- function(x){
+  return(c(var_one_pass_algo(x), var_two_pass_algo(x), var_shift_algo(x), var_online_algo(x), var(x)))
+}
+calc_var(x1)
+
+```
+```{r}
+calc_var(x2)
+```
+
+## Task 2 - Compare the computational performance of the 4 algorithms
+
+\begin{center}
+\begin{tabular}{|c|c|c|c|c|c|} 
+ \hline
+ \textbf{Series} & \textbf{One-Pass} & \textbf{} & \textbf{Shifted One-Pass} & \textbf{Online} & \textbf{R Variance} \\ [0.8ex] 
+ \hline\hline
+ $x_1$ (mean=0) & 0.9702095 & 0.9702095 & 0.9702095 & 0.9702095 & 0.9702095 \\ 
+ \hline
+ $x_2$ (mean=1000) & 1.059499 & 1.059499 & 1.059499 & 1.059499 & 1.059499 \\
+ \hline
+\end{tabular}
+\end{center}
+
+We can see that we get exactly the same values with the different methods of variance computation.
+
+```{r, fig.show="hold", out.width="50%"}
+barplot(calc_var(x1), names.arg = c("two_pass_algo", "one_pass_algo", "shift_algo", "online_algo", "Standard Var"), main="Mean = 0")
+```
+```{r, fig.show="hold", out.width="50%"}
+barplot(calc_var(x2), names.arg = c("two_pass_algo", "one_pass_algo", "shift_algo", "online_algo", "Standard Var"), main="Mean = 1000")
+```
+
+*Comparison of conputation time*
+
+
+We can use the "microbenchmark" function to perform 100 calculations of the variance on the two datasets. 
+
+```{r, echo=TRUE}
+time_x1 <- microbenchmark(var_one_pass_algo(x1),var_two_pass_algo(x1),var_shift_algo(x1),var_online_algo(x1),var(x1), times = 100)
+time_x2 <- microbenchmark(var_two_pass_algo(x2),var_one_pass_algo(x2),var_shift_algo(x2),var_online_algo(x2),var(x2), times = 100)
+```
+
+*The summary for x1*
+```{r, echo=TRUE}
+summary(time_x1)
+```
+
+*The summary for x2*
+
+```{r, echo=TRUE}
+summary(time_x2)
+```
+
+*Visualisation of the mean of the computation times*
+
+```{r, echo=TRUE}
+
+barplot(summary(time_x1)$mean, names.arg = c("one_pass", "two_pass", "shift_algo", "var_online_algo", "var"), main="AVG computation for dataset x1")
+```
+
+```{r, echo=TRUE}
+barplot(summary(time_x1)$mean, names.arg = c("one_pass", "two_pass", "shift_algo", "var_online_algo", "var"), main="AVG computation for dataset x1")
+```
+
+
+Results:
+The one - pass and two-pass alogorithms are the fastest and the online algorithm is the slowest, based on both datasets.
+
+
+## Task 3 - Investigate the scale invariance property for different values
+
+The condition number is a metric that measures how responsive a function's output is to tiny alterations in its input. It offers insights into how sensitive the function is to even minor variations, such as noise or errors in the input data.
+
+*Computation of the condition number*
+```{r, echo=TRUE}
+condition_number <- function(n,mean,S){
+  condition_num <- sqrt(1+(((mean^2) * n)/S))
+}
+```
+
+*Calculation of a sequence of values by which to shift the dataset and the corresponding condition numbers*
+```{r, echo=TRUE}
+#Calculating sample mean
+smpl_mean <- function(x){
+  sum <- 0
+  for (i in x){
+    sum <- sum + i
+  }
+  return (sum/length(x))
+}
+
+func_condit_nums <- function(x){
+  mean <- smpl_mean(x)
+  n <- length(x)
+  means <- list()
+  condition_numbers <- list()
+  shift_values = seq(from=mean-3,to=mean+3,length.out=100)
+  for (i in 1:length(shift_values)){
+    mean_shifted <- mean - shift_values[i]
+    means[i] <- shift_values[i]
+    x_shifted <- x - shift_values[i]
+    S <- sum((x_shifted - mean_shifted)^2)
+    con_number = condition_number(n,mean_shifted,S)
+    condition_numbers[i] <- con_number
+  }
+  result <- c(means,condition_numbers)
+  return (result)
+}
+
+
+```
+
+Plotted results:
+
+```{r, echo=TRUE}
+result <- func_condit_nums(x1)
+means <- result[1:100]
+con_num <- result[101:200]
+
+plot(means,con_num,main="Condition numbers for shifted mean values of dataset x1")
+```
+
+```{r, echo=TRUE}
+result <- func_condit_nums(x2)
+means <- result[1:100]
+con_num <- result[101:200]
+
+plot(means,con_num,main="Condition numbers for shifted mean values of dataset x2")
+```
+
+Both visualizations have identical shapes. The optimal condition number values align with the dataset means in both cases.
+It can be seen that the datasets experience significant shifts.
+
+## Task 4 - Compare condition numbers for the 2 simulated data sets and a third one where the requirement is not fulfilled
+
+
+```{r, echo=TRUE}
+x1_mean <- mean(x1)
+x2_mean <- mean(x2)
+x3_mean <- mean(x3)
+
+cond_numx1 = condition_number(100,x1_mean,sum((x1 - x1_mean)^2))
+cond_numx2 = condition_number(100,x2_mean,sum((x2 - x2_mean)^2))
+cond_numx3 = condition_number(100,x3_mean,sum((x3 - x3_mean)^2))
+con_num <- c(cond_numx1,cond_numx2,cond_numx3)
+con_num
+```
+
+*Comparison of condition number for different datasets*
+
+\begin{center}
+\begin{tabular}{|c|c|} 
+ \hline
+ \textbf{Dataset} & \textbf{Condition Number} \\[0.8ex] 
+ \hline\hline
+ $x_1$ (mean=0) & 1.002617 \\
+ \hline
+ $x_2$ (mean=1000) & 434.916872 \\
+ \hline
+ $x_3$ (mean=500) & 232.128020 \\
+ \hline
+\end{tabular}
+\end{center}
+
+For dataset x1 the condition number is really good because it is close to one. 
+Dataset x2 has a big condition number because it has a high mean value.
